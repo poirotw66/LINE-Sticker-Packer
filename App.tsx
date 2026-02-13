@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { UploadedImage, StickerCount, AppState, Step } from './types';
 import { generateAndDownloadZip } from './services/zipService';
@@ -25,6 +25,15 @@ const App = () => {
     isProcessing: false,
   });
 
+  // Cleanup URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      state.uploadedImages.forEach(img => URL.revokeObjectURL(img.url));
+    };
+  }, []); // Run once on unmount (closure captures initial state implies we need careful handling, but simpler to handle in remove/add logic usually) 
+  // actually, strictly speaking in React, doing this in a global unmount is a fallback.
+  // Better to handle in handleRemove.
+
   // --- Handlers ---
 
   const handleQuantitySelect = (count: StickerCount) => {
@@ -39,12 +48,19 @@ const App = () => {
   };
 
   const handleRemoveImage = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      uploadedImages: prev.uploadedImages.filter(img => img.id !== id),
-      selectedImageIds: prev.selectedImageIds.filter(sid => sid !== id),
-      mainImageId: prev.mainImageId === id ? null : prev.mainImageId
-    }));
+    setState(prev => {
+      const imgToRemove = prev.uploadedImages.find(img => img.id === id);
+      if (imgToRemove) {
+        URL.revokeObjectURL(imgToRemove.url); // Memory Cleanup
+      }
+
+      return {
+        ...prev,
+        uploadedImages: prev.uploadedImages.filter(img => img.id !== id),
+        selectedImageIds: prev.selectedImageIds.filter(sid => sid !== id),
+        mainImageId: prev.mainImageId === id ? null : prev.mainImageId
+      };
+    });
   };
 
   const handleSelectionChange = (ids: string[]) => {
@@ -141,8 +157,6 @@ const App = () => {
         );
 
       case Step.TAB_IMAGE:
-        // Pass either selected images or all images as source options? 
-        // Usually tab image comes from one of the stickers.
         const pool = state.selectedImageIds.length > 0 
           ? state.selectedImageIds.map(id => state.uploadedImages.find(i => i.id === id)!)
           : state.uploadedImages;

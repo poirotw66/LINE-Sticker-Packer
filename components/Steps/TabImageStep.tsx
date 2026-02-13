@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadedImage } from '../../types';
-import { cropImage } from '../../services/imageService';
 import { Move, ZoomIn, RefreshCw } from 'lucide-react';
 import { LINE_SPECS } from '../../constants';
 
@@ -18,11 +17,9 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
   // Constants for crop box (display size)
-  // Target is 96x74. We can display it at 2x or 3x size for easier editing.
   const DISPLAY_SCALE = 3; 
   const CROP_W = LINE_SPECS.tab.width * DISPLAY_SCALE; // 288
   const CROP_H = LINE_SPECS.tab.height * DISPLAY_SCALE; // 222
@@ -33,39 +30,50 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
     }
   }, [existingBlob]);
 
-  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // --- Improved Dragging Logic (Global Event Listeners) ---
+
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); // Prevent image dragging default behavior
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     setDragStart({ x: clientX - position.x, y: clientY - position.y });
   };
 
-  const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    setPosition({
-      x: clientX - dragStart.x,
-      y: clientY - dragStart.y
-    });
-  };
+  useEffect(() => {
+    const handleWindowMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDragging) return;
+      const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = 'touches' in e ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+      
+      setPosition({
+        x: clientX - dragStart.x,
+        y: clientY - dragStart.y
+      });
+    };
 
-  const handleDragEnd = () => {
-    setIsDragging(false);
-  };
+    const handleWindowUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleWindowMove);
+      window.addEventListener('mouseup', handleWindowUp);
+      window.addEventListener('touchmove', handleWindowMove);
+      window.addEventListener('touchend', handleWindowUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMove);
+      window.removeEventListener('mouseup', handleWindowUp);
+      window.removeEventListener('touchmove', handleWindowMove);
+      window.removeEventListener('touchend', handleWindowUp);
+    };
+  }, [isDragging, dragStart]);
+
 
   const generateCrop = async () => {
     if (!imageRef.current) return;
-    
-    // Calculate actual crop coordinates based on current display logic
-    // The image is displayed at: width * scale, height * scale
-    // The crop box is centered.
-    // However, here we are moving the image relative to the center.
-    // It's easier to think: We are rendering the crop area (CROP_W x CROP_H)
-    // The image is drawn at (position.x + offset, position.y + offset)
-    
-    // We will render exactly what is seen in the viewbox to a canvas of size 96x74
     
     const canvas = document.createElement('canvas');
     canvas.width = LINE_SPECS.tab.width;
@@ -73,20 +81,10 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
     const ctx = canvas.getContext('2d');
     
     if (ctx && imageRef.current) {
-      // Clear background
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
       const img = imageRef.current;
       
-      // Calculate drawn size of image in the "Editor space"
-      // Editor space is CROP_W x CROP_H
-      // Image is drawn at position.x, position.y relative to the top-left of the editor box
-      // But wait, the UI below centers the image.
-      
-      // Let's rely on standard "draw image at offset" logic.
-      // Scaling factor from Editor Space to Output Space
       const outputScale = 1 / DISPLAY_SCALE;
-
       const drawX = position.x * outputScale;
       const drawY = position.y * outputScale;
       const drawW = img.width * scale * outputScale;
@@ -140,15 +138,10 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
         {/* Editor Area */}
         <div className="flex-1 flex flex-col items-center">
           <div 
-            className="relative overflow-hidden bg-gray-100 border-2 border-gray-300 shadow-inner"
-            style={{ width: CROP_W, height: CROP_H }}
-            onMouseDown={handleDragStart}
-            onMouseMove={handleDragMove}
-            onMouseUp={handleDragEnd}
-            onMouseLeave={handleDragEnd}
-            onTouchStart={handleDragStart}
-            onTouchMove={handleDragMove}
-            onTouchEnd={handleDragEnd}
+            className="relative overflow-hidden bg-gray-100 border-2 border-gray-300 shadow-inner group"
+            style={{ width: CROP_W, height: CROP_H, cursor: isDragging ? 'grabbing' : 'grab' }}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleMouseDown}
           >
             {selectedImage && (
               <img 
@@ -159,14 +152,14 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
                 style={{
                   transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
                   transformOrigin: 'top left',
-                  cursor: isDragging ? 'grabbing' : 'grab',
-                  maxWidth: 'none' // Allow image to overflow
+                  maxWidth: 'none',
+                  pointerEvents: 'none' // Let events pass to container
                 }}
               />
             )}
             
             {/* Grid Overlay */}
-            <div className="absolute inset-0 pointer-events-none border border-black/10 grid grid-cols-3 grid-rows-3">
+            <div className="absolute inset-0 pointer-events-none border border-black/10 grid grid-cols-3 grid-rows-3 z-10">
               <div className="border-r border-b border-black/10"></div>
               <div className="border-r border-b border-black/10"></div>
               <div className="border-b border-black/10"></div>
@@ -178,7 +171,13 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
               <div></div>
             </div>
             
-            <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded pointer-events-none">
+            {!isDragging && (
+               <div className="absolute inset-0 flex items-center justify-center bg-black/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                  <Move className="text-white/80 w-8 h-8 drop-shadow-md" />
+               </div>
+            )}
+
+            <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded pointer-events-none z-20">
               Tab Preview Area
             </div>
           </div>
