@@ -1,0 +1,5 @@
+{
+  "name": "LINE Sticker Packer",
+  "description": "A professional tool to package, resize, and format LINE Creators Market stickers. Features auto-resizing, naming, tab cropping, and ZIP export.",
+  "requestFramePermissions": []
+}
