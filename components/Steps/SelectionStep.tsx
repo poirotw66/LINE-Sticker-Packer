@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { UploadedImage, StickerCount } from '../../types';
-import { Check, GripVertical } from 'lucide-react';
+import { Check, GripVertical, CheckCheck, X } from 'lucide-react';
 
 // --- Sortable Item Component ---
 interface SortablePhotoProps {
@@ -114,6 +114,27 @@ export const SelectionStep: React.FC<SelectionStepProps> = ({
     }
   };
 
+  const handleSelectAll = () => {
+    const remainingSlots = targetCount - selectedIds.length;
+    if (remainingSlots <= 0) return;
+
+    // Find images that are not yet selected
+    const unselectedIds = uploadedImages
+      .filter(img => !selectedIds.includes(img.id))
+      .map(img => img.id);
+
+    // Take only what we need to fill the quota
+    const toAdd = unselectedIds.slice(0, remainingSlots);
+    onSelectionChange([...selectedIds, ...toAdd]);
+  };
+
+  const handleClearAll = () => {
+    onSelectionChange([]);
+  };
+
+  const isFull = selectedIds.length >= targetCount;
+  const isAllUploadedSelected = uploadedImages.length > 0 && uploadedImages.every(img => selectedIds.includes(img.id));
+
   return (
     <div className="space-y-8 animate-fadeIn">
       <div className="text-center">
@@ -165,7 +186,29 @@ export const SelectionStep: React.FC<SelectionStepProps> = ({
 
       {/* Available Pool */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Available Images</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Available Images</h3>
+          
+          <div className="flex gap-2">
+            <button
+              onClick={handleSelectAll}
+              disabled={isFull || isAllUploadedSelected}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-100 rounded-md hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <CheckCheck className="w-3 h-3" />
+              {isFull ? 'Full' : 'Auto Fill'}
+            </button>
+            <button
+              onClick={handleClearAll}
+              disabled={selectedIds.length === 0}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <X className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-3">
           {uploadedImages.map((img) => {
             const isSelected = selectedIds.includes(img.id);

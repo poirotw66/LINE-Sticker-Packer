@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { UploadedImage, StickerCount, AppState, Step } from './types';
 import { generateAndDownloadZip } from './services/zipService';
@@ -24,15 +24,6 @@ const App = () => {
     tabImageBlob: null,
     isProcessing: false,
   });
-
-  // Cleanup URLs on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      state.uploadedImages.forEach(img => URL.revokeObjectURL(img.url));
-    };
-  }, []); // Run once on unmount (closure captures initial state implies we need careful handling, but simpler to handle in remove/add logic usually) 
-  // actually, strictly speaking in React, doing this in a global unmount is a fallback.
-  // Better to handle in handleRemove.
 
   // --- Handlers ---
 
