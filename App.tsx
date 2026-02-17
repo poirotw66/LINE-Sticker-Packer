@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { UploadedImage, StickerCount, AppState, Step } from './types';
 import { generateAndDownloadZip } from './services/zipService';
+import { ApiKeyProvider } from './contexts/ApiKeyContext';
 
 // Components
 import { Button } from './components/Button';
@@ -13,9 +14,11 @@ import { EraserStep } from './components/Steps/EraserStep';
 import { MainImageStep } from './components/Steps/MainImageStep';
 import { TabImageStep } from './components/Steps/TabImageStep';
 import { DownloadStep } from './components/Steps/DownloadStep';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { SettingsModal } from './components/SettingsModal';
+import { ArrowLeft, ArrowRight, Settings } from 'lucide-react';
 
-const App = () => {
+const AppContent = () => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [state, setState] = useState<AppState>({
     step: Step.QUANTITY,
     targetCount: null,
@@ -206,6 +209,7 @@ const App = () => {
             tabImageBlob={state.tabImageBlob}
             onDownload={handleDownload}
             isProcessing={state.isProcessing}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         );
 
@@ -225,13 +229,25 @@ const App = () => {
             </div>
             <h1 className="text-xl font-bold text-gray-800">LINE Sticker Packer</h1>
           </div>
-          {state.targetCount && (
-            <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-              Target: {state.targetCount} stickers
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {state.targetCount && (
+              <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                Target: {state.targetCount} stickers
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              aria-label="Open settings"
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </header>
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Progress */}
       <div className="bg-white border-b border-gray-200">
@@ -283,4 +299,10 @@ const Package = ({ size }: { size: number }) => (
   </svg>
 );
 
-export default App;
+export default function App() {
+  return (
+    <ApiKeyProvider>
+      <AppContent />
+    </ApiKeyProvider>
+  );
+}
