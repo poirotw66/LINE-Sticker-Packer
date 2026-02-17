@@ -13,6 +13,7 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
   const [isDrawing, setIsDrawing] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [cursorStyle, setCursorStyle] = useState<{ x: number; y: number; radiusPx: number } | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,6 +63,23 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
     };
   };
 
+  // Update circular eraser cursor position and size (in screen pixels) when over canvas
+  const updateEraserCursor = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !containerRef.current) return;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const scale = rect.width / canvas.width;
+    const radiusPx = (brushSize / 2) * scale;
+    setCursorStyle({
+      x: e.clientX - containerRect.left,
+      y: e.clientY - containerRect.top,
+      radiusPx: Math.max(4, radiusPx),
+    });
+  };
+
+  const hideEraserCursor = () => setCursorStyle(null);
+
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     setIsDrawing(true);
     setHasUnsavedChanges(true);
@@ -77,8 +95,7 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing || !canvasRef.current) return;
-    e.preventDefault(); // Prevent scrolling on touch
-    
+    e.preventDefault();
     const { x, y } = getCoordinates(e);
     const ctx = canvasRef.current.getContext('2d');
     if (ctx) {
@@ -86,6 +103,11 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
       ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
       ctx.fill();
     }
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    draw(e);
+    updateEraserCursor(e);
   };
 
   const stopDrawing = () => {
@@ -208,35 +230,57 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
               </button>
            </div>
 
-           {/* Canvas Container */}
+           {/* Canvas Container: checkerboard = non-image (transparent) area; canvas has border to separate image */}
            <div 
              ref={containerRef}
-             className="flex-1 overflow-auto flex items-center justify-center p-4 bg-gray-100"
-             // Checkerboard background for transparency
+             className="flex-1 overflow-auto flex items-center justify-center p-4 relative min-h-0"
              style={{
                 backgroundImage: `
-                  linear-gradient(45deg, #ccc 25%, transparent 25%), 
-                  linear-gradient(-45deg, #ccc 25%, transparent 25%), 
-                  linear-gradient(45deg, transparent 75%, #ccc 75%), 
-                  linear-gradient(-45deg, transparent 75%, #ccc 75%)
+                  linear-gradient(45deg, #e5e7eb 25%, transparent 25%), 
+                  linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), 
+                  linear-gradient(45deg, transparent 75%, #e5e7eb 75%), 
+                  linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)
                 `,
-                backgroundSize: '20px 20px',
-                backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px'
+                backgroundSize: '16px 16px',
+                backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                backgroundColor: '#d1d5db',
              }}
            >
               {selectedImage ? (
-                <canvas
-                  ref={canvasRef}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
-                  className="max-w-full max-h-full shadow-lg cursor-crosshair touch-none"
-                  style={{ maxWidth: '100%', maxHeight: '100%' }}
-                />
+                <>
+                  <canvas
+                    ref={canvasRef}
+                    onMouseDown={startDrawing}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={() => { stopDrawing(); hideEraserCursor(); }}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                    className="max-w-full max-h-full touch-none select-none"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      cursor: cursorStyle ? 'none' : 'crosshair',
+                      boxShadow: '0 0 0 2px rgba(0,0,0,0.15), 0 0 0 4px rgba(255,255,255,0.6)',
+                      borderRadius: '2px',
+                    }}
+                  />
+                  {/* Circular eraser cursor showing current brush size */}
+                  {cursorStyle && (
+                    <div
+                      className="pointer-events-none absolute border-2 border-gray-600 rounded-full bg-transparent"
+                      style={{
+                        left: cursorStyle.x,
+                        top: cursorStyle.y,
+                        width: cursorStyle.radiusPx * 2,
+                        height: cursorStyle.radiusPx * 2,
+                        marginLeft: -cursorStyle.radiusPx,
+                        marginTop: -cursorStyle.radiusPx,
+                      }}
+                    />
+                  )}
+                </>
               ) : (
                 <div className="text-gray-400 flex flex-col items-center">
                   <AlertCircle className="w-8 h-8 mb-2" />
