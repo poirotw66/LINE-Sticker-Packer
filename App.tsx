@@ -19,6 +19,7 @@ import { ArrowLeft, ArrowRight, Settings } from 'lucide-react';
 
 const AppContent = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>({
     step: Step.QUANTITY,
     targetCount: null,
@@ -88,12 +89,13 @@ const AppContent = () => {
   };
 
   const handleDownload = async () => {
+    setDownloadError(null);
     setState(prev => ({ ...prev, isProcessing: true }));
     try {
       await generateAndDownloadZip(state);
     } catch (error) {
       console.error(error);
-      alert("Failed to generate ZIP. Please try again.");
+      setDownloadError('Failed to generate ZIP. Please try again.');
     } finally {
       setState(prev => ({ ...prev, isProcessing: false }));
     }
@@ -209,6 +211,7 @@ const AppContent = () => {
             tabImageBlob={state.tabImageBlob}
             onDownload={handleDownload}
             isProcessing={state.isProcessing}
+            downloadError={downloadError}
             onOpenSettings={() => setSettingsOpen(true)}
           />
         );

@@ -13,6 +13,20 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: (id) => {
+              if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'react';
+              if (id.includes('node_modules/jszip')) return 'jszip';
+              if (id.includes('node_modules/@google/genai')) return 'genai';
+              if (id.includes('node_modules/@dnd-kit')) return 'dnd';
+              if (id.includes('node_modules/lucide-react')) return 'lucide';
+            },
+          },
+        },
+        chunkSizeWarningLimit: 400,
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

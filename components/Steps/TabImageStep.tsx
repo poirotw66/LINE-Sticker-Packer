@@ -26,8 +26,17 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
 
   useEffect(() => {
     if (existingBlob) {
-      setPreviewUrl(URL.createObjectURL(existingBlob));
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(existingBlob);
+      });
     }
+    return () => {
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
   }, [existingBlob]);
 
   // --- Improved Dragging Logic (Global Event Listeners) ---
@@ -95,7 +104,10 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
       canvas.toBlob((blob) => {
         if (blob) {
           onConfirm(blob);
-          setPreviewUrl(URL.createObjectURL(blob));
+          setPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return URL.createObjectURL(blob);
+          });
         }
       }, 'image/png');
     }

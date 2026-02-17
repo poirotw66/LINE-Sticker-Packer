@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { UploadedImage } from '../../types';
 import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2, Settings } from 'lucide-react';
 import { Button } from '../Button';
@@ -11,8 +11,11 @@ interface DownloadStepProps {
   tabImageBlob: Blob | null;
   onDownload: () => void;
   isProcessing: boolean;
+  downloadError?: string | null;
   onOpenSettings?: () => void;
 }
+
+const COPY_FEEDBACK_MS = 2000;
 
 export const DownloadStep: React.FC<DownloadStepProps> = ({ 
   selectedImages, 
@@ -20,6 +23,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
   tabImageBlob, 
   onDownload,
   isProcessing,
+  downloadError,
   onOpenSettings
 }) => {
   const { apiKey: apiKeyFromContext } = useApiKey();
@@ -27,10 +31,19 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
   const [aiMetadata, setAiMetadata] = useState<StickerMetadata | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<'zh' | 'en' | null>(null);
   const hasApiKey = !!apiKeyFromContext;
 
   const mainImage = selectedImages.find(img => img.id === mainImageId);
-  const tabImageUrl = tabImageBlob ? URL.createObjectURL(tabImageBlob) : null;
+  const tabImageUrl = useMemo(
+    () => (tabImageBlob ? URL.createObjectURL(tabImageBlob) : null),
+    [tabImageBlob]
+  );
+  useEffect(() => {
+    return () => {
+      if (tabImageUrl) URL.revokeObjectURL(tabImageUrl);
+    };
+  }, [tabImageUrl]);
 
   const handleGenerateAI = async () => {
     setIsAiLoading(true);
@@ -46,9 +59,11 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    // Could add toast notification here
+  const copyToClipboard = (text: string, field: 'zh' | 'en') => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField(null), COPY_FEEDBACK_MS);
+    });
   };
 
   return (
@@ -211,7 +226,10 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
                  <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-xs font-bold text-gray-500 uppercase">Traditional Chinese</span>
-                      <button onClick={() => copyToClipboard(aiMetadata.title_zh + "\n" + aiMetadata.desc_zh)} className="text-gray-400 hover:text-indigo-600"><Copy className="w-3 h-3" /></button>
+                      <button onClick={() => copyToClipboard(aiMetadata.title_zh + "\n" + aiMetadata.desc_zh, 'zh')} className="text-gray-400 hover:text-indigo-600 flex items-center gap-1" title="Copy">
+                      <Copy className="w-3 h-3" />
+                      {copiedField === 'zh' && <span className="text-[10px] text-green-600 font-medium">Copied!</span>}
+                    </button>
                     </div>
                     <div className="mb-2">
                       <label className="text-[10px] text-gray-400 block">Title</label>
@@ -227,7 +245,10 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
                  <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-xs font-bold text-gray-500 uppercase">English</span>
-                      <button onClick={() => copyToClipboard(aiMetadata.title_en + "\n" + aiMetadata.desc_en)} className="text-gray-400 hover:text-indigo-600"><Copy className="w-3 h-3" /></button>
+                      <button onClick={() => copyToClipboard(aiMetadata.title_en + "\n" + aiMetadata.desc_en, 'en')} className="text-gray-400 hover:text-indigo-600 flex items-center gap-1" title="Copy">
+                      <Copy className="w-3 h-3" />
+                      {copiedField === 'en' && <span className="text-[10px] text-green-600 font-medium">Copied!</span>}
+                    </button>
                     </div>
                     <div className="mb-2">
                       <label className="text-[10px] text-gray-400 block">Title</label>
@@ -249,6 +270,11 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
           </div>
 
           <div className="pt-4 border-t">
+            {downloadError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
+                <span role="alert">{downloadError}</span>
+              </div>
+            )}
             <Button 
               onClick={onDownload} 
               variant="primary" 
