@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { UploadedImage } from '../../types';
-import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2 } from 'lucide-react';
+import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2, Settings } from 'lucide-react';
 import { Button } from '../Button';
 import { generateStickerMetadata, StickerMetadata } from '../../services/aiService';
+import { useApiKey } from '../../contexts/ApiKeyContext';
 
 interface DownloadStepProps {
   selectedImages: UploadedImage[]; // The ordered list
@@ -10,6 +11,7 @@ interface DownloadStepProps {
   tabImageBlob: Blob | null;
   onDownload: () => void;
   isProcessing: boolean;
+  onOpenSettings?: () => void;
 }
 
 export const DownloadStep: React.FC<DownloadStepProps> = ({ 
@@ -17,12 +19,15 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
   mainImageId, 
   tabImageBlob, 
   onDownload,
-  isProcessing
+  isProcessing,
+  onOpenSettings
 }) => {
+  const { apiKey: apiKeyFromContext } = useApiKey();
   const [viewMode, setViewMode] = useState<'list' | 'preview'>('list');
   const [aiMetadata, setAiMetadata] = useState<StickerMetadata | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const hasApiKey = !!apiKeyFromContext;
 
   const mainImage = selectedImages.find(img => img.id === mainImageId);
   const tabImageUrl = tabImageBlob ? URL.createObjectURL(tabImageBlob) : null;
@@ -31,11 +36,11 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
     setIsAiLoading(true);
     setAiError(null);
     try {
-      const data = await generateStickerMetadata(selectedImages, mainImageId, tabImageBlob);
+      const data = await generateStickerMetadata(apiKeyFromContext, selectedImages, mainImageId, tabImageBlob);
       setAiMetadata(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setAiError(err.message || "Failed to generate metadata");
+      setAiError(err instanceof Error ? err.message : 'Failed to generate metadata');
     } finally {
       setIsAiLoading(false);
     }
@@ -170,7 +175,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
                  <Sparkles className="w-5 h-5 text-indigo-500" />
                  AI Info Generator
                </h3>
-               {process.env.API_KEY ? (
+               {hasApiKey ? (
                  <button
                   onClick={handleGenerateAI}
                   disabled={isAiLoading}
@@ -180,7 +185,13 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
                    {isAiLoading ? 'Analyzing...' : 'Generate Text'}
                  </button>
                ) : (
-                 <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">API Key missing</span>
+                 <button
+                   type="button"
+                   onClick={onOpenSettings}
+                   className="text-xs text-red-600 bg-red-50 px-2 py-1.5 rounded border border-red-200 hover:bg-red-100 flex items-center gap-1"
+                 >
+                   <Settings className="w-3 h-3" /> Add API Key
+                 </button>
                )}
              </div>
 
