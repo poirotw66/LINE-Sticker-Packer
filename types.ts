@@ -21,9 +21,10 @@ export enum Step {
   QUANTITY = 0,
   UPLOAD = 1,
   SELECTION = 2,
-  MAIN_IMAGE = 3,
-  TAB_IMAGE = 4,
-  DOWNLOAD = 5
+  ERASER = 3,     // New Step
+  MAIN_IMAGE = 4,
+  TAB_IMAGE = 5,
+  DOWNLOAD = 6
 }
 
 export interface CropArea {

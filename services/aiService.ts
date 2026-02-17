@@ -24,19 +24,17 @@ export interface StickerMetadata {
   desc_en: string;
 }
 
-/** Pass apiKey from context (user setting or build-time env). */
 export const generateStickerMetadata = async (
-  apiKey: string | null,
   selectedImages: UploadedImage[],
   mainImageId: string | null,
   tabImageBlob: Blob | null
 ): Promise<StickerMetadata> => {
-  const key = apiKey || (typeof process !== 'undefined' && process.env?.API_KEY) || (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY);
-  if (!key) {
-    throw new Error("API key is missing. Add it in Settings or set GEMINI_API_KEY in .env for local dev.");
+  
+  if (!process.env.API_KEY) {
+    throw new Error("API Key is missing in environment variables");
   }
 
-  const ai = new GoogleGenAI({ apiKey: key });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   // 1. Prepare Content
   const parts: any[] = [];

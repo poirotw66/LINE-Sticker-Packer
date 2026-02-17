@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { UploadedImage, StickerCount, AppState, Step } from './types';
 import { generateAndDownloadZip } from './services/zipService';
-import { ApiKeyProvider } from './contexts/ApiKeyContext';
 
 // Components
 import { Button } from './components/Button';
@@ -10,14 +9,13 @@ import { Stepper } from './components/Layout/Stepper';
 import { QuantityStep } from './components/Steps/QuantityStep';
 import { UploadStep } from './components/Steps/UploadStep';
 import { SelectionStep } from './components/Steps/SelectionStep';
+import { EraserStep } from './components/Steps/EraserStep';
 import { MainImageStep } from './components/Steps/MainImageStep';
 import { TabImageStep } from './components/Steps/TabImageStep';
 import { DownloadStep } from './components/Steps/DownloadStep';
-import { SettingsModal } from './components/SettingsModal';
-import { ArrowLeft, ArrowRight, Settings } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 
-const AppContent = () => {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+const App = () => {
   const [state, setState] = useState<AppState>({
     step: Step.QUANTITY,
     targetCount: null,
@@ -61,6 +59,23 @@ const AppContent = () => {
     setState(prev => ({ ...prev, selectedImageIds: ids }));
   };
 
+  // Called when user saves changes in EraserStep
+  const handleImageUpdate = (id: string, newBlob: Blob) => {
+    const newUrl = URL.createObjectURL(newBlob);
+    
+    setState(prev => {
+      const newImages = prev.uploadedImages.map(img => {
+        if (img.id === id) {
+          // Revoke old URL to free memory
+          URL.revokeObjectURL(img.url);
+          return { ...img, url: newUrl, file: new File([newBlob], img.name, { type: 'image/png' }) };
+        }
+        return img;
+      });
+      return { ...prev, uploadedImages: newImages };
+    });
+  };
+
   const handleMainImageSelect = (id: string) => {
     setState(prev => ({ ...prev, mainImageId: id }));
   };
@@ -91,6 +106,9 @@ const AppContent = () => {
         return state.targetCount && state.uploadedImages.length >= state.targetCount;
       case Step.SELECTION:
         return state.selectedImageIds.length === state.targetCount;
+      // Eraser step is optional, user can just click next
+      case Step.ERASER:
+        return true;
       case Step.MAIN_IMAGE:
         return !!state.mainImageId;
       case Step.TAB_IMAGE:
@@ -137,6 +155,19 @@ const AppContent = () => {
           />
         );
 
+      case Step.ERASER:
+        // Only show images that have been selected for the set
+        const selectedForEraser = state.selectedImageIds
+          .map(id => state.uploadedImages.find(img => img.id === id)!)
+          .filter(Boolean);
+          
+        return (
+          <EraserStep 
+            images={selectedForEraser}
+            onUpdateImage={handleImageUpdate}
+          />
+        );
+
       case Step.MAIN_IMAGE:
         const selectedImages = state.selectedImageIds
           .map(id => state.uploadedImages.find(img => img.id === id)!)
@@ -175,7 +206,6 @@ const AppContent = () => {
             tabImageBlob={state.tabImageBlob}
             onDownload={handleDownload}
             isProcessing={state.isProcessing}
-            onOpenSettings={() => setSettingsOpen(true)}
           />
         );
 
@@ -195,25 +225,13 @@ const AppContent = () => {
             </div>
             <h1 className="text-xl font-bold text-gray-800">LINE Sticker Packer</h1>
           </div>
-          <div className="flex items-center gap-3">
-            {state.targetCount && (
-              <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                Target: {state.targetCount} stickers
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-              aria-label="Open settings"
-              title="Settings"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-          </div>
+          {state.targetCount && (
+            <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+              Target: {state.targetCount} stickers
+            </div>
+          )}
         </div>
       </header>
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Progress */}
       <div className="bg-white border-b border-gray-200">
@@ -265,10 +283,4 @@ const Package = ({ size }: { size: number }) => (
   </svg>
 );
 
-export default function App() {
-  return (
-    <ApiKeyProvider>
-      <AppContent />
-    </ApiKeyProvider>
-  );
-}
+export default App;

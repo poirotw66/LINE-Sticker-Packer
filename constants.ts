@@ -12,6 +12,7 @@ export const STEPS_LABELS = [
   "Select Quantity",
   "Upload Images",
   "Sort Stickers",
+  "Touch Up",     // New Label
   "Pick Main Image",
   "Crop Tab Image",
   "Download"

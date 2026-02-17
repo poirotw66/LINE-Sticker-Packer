@@ -4,10 +4,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
-    // GitHub Pages serves from https://<user>.github.io/<repo-name>/
-    const base = process.env.GITHUB_ACTIONS === 'true' ? '/LINE-Sticker-Packer/' : '/';
     return {
-      base,
       server: {
         port: 3000,
         host: '0.0.0.0',
