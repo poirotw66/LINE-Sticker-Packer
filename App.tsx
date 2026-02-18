@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { UploadedImage, StickerCount, AppState, Step } from './types';
 import { generateAndDownloadZip } from './services/zipService';
 import { ApiKeyProvider } from './contexts/ApiKeyContext';
