@@ -1,19 +1,26 @@
 import React from 'react';
 import { STICKER_COUNTS } from '../../constants';
-import { StickerCount } from '../../types';
+import { StickerCount, ProductType } from '../../types';
 import { CheckCircle } from 'lucide-react';
 
 interface QuantityStepProps {
   selected: StickerCount | null;
   onSelect: (count: StickerCount) => void;
+  productType: ProductType;
 }
 
-export const QuantityStep: React.FC<QuantityStepProps> = ({ selected, onSelect }) => {
+export const QuantityStep: React.FC<QuantityStepProps> = ({ selected, onSelect, productType }) => {
+  const isEmoticon = productType === 'emoticon';
+  const unitLabel = isEmoticon ? 'Emoticons' : 'Stickers';
   return (
     <div className="space-y-6 animate-fadeIn">
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-800">Select Sticker Set Size</h2>
-        <p className="text-gray-500 mt-2">How many stickers do you plan to publish?</p>
+        <h2 className="text-2xl font-bold text-gray-800">
+          {isEmoticon ? 'Select Emoticon Set Size' : 'Select Sticker Set Size'}
+        </h2>
+        <p className="text-gray-500 mt-2">
+          {isEmoticon ? 'How many emoticons (8–40)?' : 'How many stickers do you plan to publish?'}
+        </p>
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -31,7 +38,7 @@ export const QuantityStep: React.FC<QuantityStepProps> = ({ selected, onSelect }
             `}
           >
             <span className="text-4xl font-bold">{count}</span>
-            <span className="text-sm font-medium uppercase tracking-wider">Stickers</span>
+            <span className="text-sm font-medium uppercase tracking-wider">{unitLabel}</span>
             
             {selected === count && (
               <div className="absolute top-2 right-2">

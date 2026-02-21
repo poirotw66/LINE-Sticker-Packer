@@ -1,5 +1,8 @@
 export type StickerCount = 8 | 16 | 24 | 32 | 40;
 
+/** Sticker pack (貼圖) vs Emoticon pack (表情貼). */
+export type ProductType = 'sticker' | 'emoticon';
+
 export interface UploadedImage {
   id: string;
   url: string;
@@ -9,22 +12,24 @@ export interface UploadedImage {
 
 export interface AppState {
   step: number;
+  productType: ProductType | null;
   targetCount: StickerCount | null;
   uploadedImages: UploadedImage[];
-  selectedImageIds: string[]; // Ordered list of IDs for the sticker set
-  mainImageId: string | null;
-  tabImageBlob: Blob | null; // The processed tab image
+  selectedImageIds: string[];
+  mainImageId: string | null; // Only used for sticker (貼圖)
+  tabImageBlob: Blob | null;
   isProcessing: boolean;
 }
 
 export enum Step {
-  QUANTITY = 0,
-  UPLOAD = 1,
-  SELECTION = 2,
-  ERASER = 3,     // New Step
-  MAIN_IMAGE = 4,
-  TAB_IMAGE = 5,
-  DOWNLOAD = 6
+  PRODUCT_TYPE = 0,
+  QUANTITY = 1,
+  UPLOAD = 2,
+  SELECTION = 3,
+  ERASER = 4,
+  MAIN_IMAGE = 5,
+  TAB_IMAGE = 6,
+  DOWNLOAD = 7,
 }
 
 export interface CropArea {

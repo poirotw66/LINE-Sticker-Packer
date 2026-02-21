@@ -1,57 +1,58 @@
 import JSZip from 'jszip';
 import saveAs from 'file-saver';
-import { AppState, UploadedImage } from '../types';
+import { AppState } from '../types';
 import { LINE_SPECS } from '../constants';
 import { processStickerImage } from './imageService';
 
 export const generateAndDownloadZip = async (
   state: AppState
 ): Promise<void> => {
+  const productType = state.productType ?? 'sticker';
+  const specs = LINE_SPECS[productType];
+  const contentSize = specs.content;
+
   const zip = new JSZip();
-  const folder = zip.folder('sticker-pack');
-  
+  const folderName = productType === 'emoticon' ? 'emoticon-pack' : 'sticker-pack';
+  const folder = zip.folder(folderName);
   if (!folder) throw new Error("Failed to create zip folder");
 
-  // 1. Process Stickers (01.png - XX.png)
-  const stickerPromises = state.selectedImageIds.map(async (id, index) => {
-    const imgObj = state.uploadedImages.find(img => img.id === id);
+  // 1. Content images: sticker 01.png–40.png (2-digit); emoticon 001.png–040.png (3-digit)
+  const contentPadLength = productType === 'emoticon' ? 3 : 2;
+  const contentPromises = state.selectedImageIds.map(async (id, index) => {
+    const imgObj = state.uploadedImages.find((img) => img.id === id);
     if (!imgObj) return;
-
-    // Pad filename: 1 -> 01, 10 -> 10
-    const fileName = `${String(index + 1).padStart(2, '0')}.png`;
-    
-    // Resize to 320x320 (Contain)
+    const fileName = `${String(index + 1).padStart(contentPadLength, '0')}.png`;
     const blob = await processStickerImage(
-      imgObj.url, 
-      LINE_SPECS.sticker.width, 
-      LINE_SPECS.sticker.height
+      imgObj.url,
+      contentSize.width,
+      contentSize.height
     );
     folder.file(fileName, blob);
   });
 
-  // 2. Process Main Image (main.png)
-  const mainImagePromise = (async () => {
-    if (!state.mainImageId) return;
-    const imgObj = state.uploadedImages.find(img => img.id === state.mainImageId);
-    if (!imgObj) return;
+  // 2. Main image (main.png): sticker only, 240×240
+  const mainImagePromise =
+    productType === 'sticker' && state.mainImageId
+      ? (async () => {
+          const imgObj = state.uploadedImages.find((img) => img.id === state.mainImageId);
+          if (!imgObj) return;
+          const blob = await processStickerImage(
+            imgObj.url,
+            LINE_SPECS.sticker.main.width,
+            LINE_SPECS.sticker.main.height
+          );
+          folder.file('main.png', blob);
+        })()
+      : Promise.resolve();
 
-    const blob = await processStickerImage(
-      imgObj.url,
-      LINE_SPECS.main.width,
-      LINE_SPECS.main.height
-    );
-    folder.file('main.png', blob);
-  })();
+  // 3. Tab image (tab.png): 96×74, same for both
+  const tabImagePromise = state.tabImageBlob
+    ? (async () => { folder.file('tab.png', state.tabImageBlob!); })()
+    : Promise.resolve();
 
-  // 3. Process Tab Image (tab.png)
-  const tabImagePromise = (async () => {
-    if (state.tabImageBlob) {
-      folder.file('tab.png', state.tabImageBlob);
-    }
-  })();
-
-  await Promise.all([...stickerPromises, mainImagePromise, tabImagePromise]);
+  await Promise.all([...contentPromises, mainImagePromise, tabImagePromise]);
 
   const content = await zip.generateAsync({ type: 'blob' });
-  saveAs(content, 'line-stickers-pack.zip');
+  const zipFileName = productType === 'emoticon' ? 'line-emoticons-pack.zip' : 'line-stickers-pack.zip';
+  saveAs(content, zipFileName);
 };

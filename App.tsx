@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { UploadedImage, StickerCount, AppState, Step } from './types';
+import { UploadedImage, StickerCount, AppState, Step, ProductType } from './types';
 import { generateAndDownloadZip } from './services/zipService';
 import { ApiKeyProvider } from './contexts/ApiKeyContext';
 
 // Components
 import { Button } from './components/Button';
 import { Stepper } from './components/Layout/Stepper';
+import { ProductTypeStep } from './components/Steps/ProductTypeStep';
 import { QuantityStep } from './components/Steps/QuantityStep';
 import { UploadStep } from './components/Steps/UploadStep';
 import { SelectionStep } from './components/Steps/SelectionStep';
@@ -20,7 +21,8 @@ const AppContent = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>({
-    step: Step.QUANTITY,
+    step: Step.PRODUCT_TYPE,
+    productType: null,
     targetCount: null,
     uploadedImages: [],
     selectedImageIds: [],
@@ -30,6 +32,10 @@ const AppContent = () => {
   });
 
   // --- Handlers ---
+
+  const handleProductTypeSelect = (type: ProductType) => {
+    setState((prev) => ({ ...prev, productType: type, step: Step.QUANTITY }));
+  };
 
   const handleQuantitySelect = (count: StickerCount) => {
     setState(prev => ({ ...prev, targetCount: count, step: prev.step + 1 }));
@@ -104,6 +110,8 @@ const AppContent = () => {
 
   const canProceed = () => {
     switch (state.step) {
+      case Step.PRODUCT_TYPE:
+        return !!state.productType;
       case Step.QUANTITY:
         return !!state.targetCount;
       case Step.UPLOAD:
@@ -123,21 +131,39 @@ const AppContent = () => {
   };
 
   const nextStep = () => {
-    if (canProceed()) {
-      setState(prev => ({ ...prev, step: prev.step + 1 }));
+    if (!canProceed()) return;
+    if (state.step === Step.PRODUCT_TYPE) {
+      setState((prev) => ({ ...prev, step: Step.QUANTITY }));
+      return;
     }
+    if (state.step === Step.ERASER && state.productType === 'emoticon') {
+      setState((prev) => ({ ...prev, step: Step.TAB_IMAGE }));
+      return;
+    }
+    setState((prev) => ({ ...prev, step: prev.step + 1 }));
   };
 
   const prevStep = () => {
-    setState(prev => ({ ...prev, step: Math.max(0, prev.step - 1) }));
+    if (state.step === Step.TAB_IMAGE && state.productType === 'emoticon') {
+      setState((prev) => ({ ...prev, step: Step.ERASER }));
+      return;
+    }
+    setState((prev) => ({ ...prev, step: Math.max(0, prev.step - 1) }));
   };
 
   // --- Render Step Content ---
 
   const renderStep = () => {
     switch (state.step) {
+      case Step.PRODUCT_TYPE:
+        return (
+          <ProductTypeStep
+            selected={state.productType}
+            onSelect={handleProductTypeSelect}
+          />
+        );
       case Step.QUANTITY:
-        return <QuantityStep selected={state.targetCount} onSelect={handleQuantitySelect} />;
+        return <QuantityStep selected={state.targetCount} onSelect={handleQuantitySelect} productType={state.productType!} />;
       
       case Step.UPLOAD:
         return (
@@ -205,6 +231,7 @@ const AppContent = () => {
           
         return (
           <DownloadStep 
+            productType={state.productType!}
             selectedImages={orderedImages}
             mainImageId={state.mainImageId}
             tabImageBlob={state.tabImageBlob}
@@ -232,9 +259,9 @@ const AppContent = () => {
             <h1 className="text-xl font-bold text-gray-800">LINE Sticker Packer</h1>
           </div>
           <div className="flex items-center gap-3">
-            {state.targetCount && (
+            {state.productType && state.targetCount && (
               <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                Target: {state.targetCount} stickers
+                {state.productType === 'emoticon' ? `${state.targetCount} emoticons` : `${state.targetCount} stickers`}
               </div>
             )}
             <button
@@ -253,7 +280,7 @@ const AppContent = () => {
 
       {/* Progress */}
       <div className="bg-white border-b border-gray-200">
-        <Stepper currentStep={state.step} />
+        <Stepper currentStep={state.step} productType={state.productType} />
       </div>
 
       {/* Main Content */}
@@ -269,13 +296,13 @@ const AppContent = () => {
           <Button 
             variant="secondary" 
             onClick={prevStep} 
-            disabled={state.step === 0}
+            disabled={state.step === Step.PRODUCT_TYPE}
             className="w-32"
           >
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
 
-          {state.step < Step.DOWNLOAD && (
+          {state.step < Step.DOWNLOAD && state.step !== Step.PRODUCT_TYPE && (
             <Button 
               variant="primary" 
               onClick={nextStep} 

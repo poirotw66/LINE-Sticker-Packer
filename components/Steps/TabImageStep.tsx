@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadedImage } from '../../types';
 import { Move, ZoomIn, RefreshCw } from 'lucide-react';
-import { LINE_SPECS } from '../../constants';
+import { TAB_SPEC } from '../../constants';
 
 interface TabImageStepProps {
   images: UploadedImage[];
@@ -21,8 +21,8 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
 
   // Constants for crop box (display size)
   const DISPLAY_SCALE = 3; 
-  const CROP_W = LINE_SPECS.tab.width * DISPLAY_SCALE; // 288
-  const CROP_H = LINE_SPECS.tab.height * DISPLAY_SCALE; // 222
+  const CROP_W = TAB_SPEC.width * DISPLAY_SCALE; // 288
+  const CROP_H = TAB_SPEC.height * DISPLAY_SCALE; // 222
 
   useEffect(() => {
     if (existingBlob) {
@@ -85,8 +85,8 @@ export const TabImageStep: React.FC<TabImageStepProps> = ({ images, onConfirm, e
     if (!imageRef.current) return;
     
     const canvas = document.createElement('canvas');
-    canvas.width = LINE_SPECS.tab.width;
-    canvas.height = LINE_SPECS.tab.height;
+    canvas.width = TAB_SPEC.width;
+    canvas.height = TAB_SPEC.height;
     const ctx = canvas.getContext('2d');
     
     if (ctx && imageRef.current) {

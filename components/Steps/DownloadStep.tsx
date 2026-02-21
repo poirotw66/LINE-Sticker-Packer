@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UploadedImage } from '../../types';
+import { UploadedImage, ProductType } from '../../types';
 import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2, Settings } from 'lucide-react';
 import { Button } from '../Button';
 import { generateStickerMetadata, StickerMetadata } from '../../services/aiService';
 import { useApiKey } from '../../contexts/ApiKeyContext';
 
 interface DownloadStepProps {
-  selectedImages: UploadedImage[]; // The ordered list
+  productType: ProductType;
+  selectedImages: UploadedImage[];
   mainImageId: string | null;
   tabImageBlob: Blob | null;
   onDownload: () => void;
@@ -17,15 +18,17 @@ interface DownloadStepProps {
 
 const COPY_FEEDBACK_MS = 2000;
 
-export const DownloadStep: React.FC<DownloadStepProps> = ({ 
-  selectedImages, 
-  mainImageId, 
-  tabImageBlob, 
+export const DownloadStep: React.FC<DownloadStepProps> = ({
+  productType,
+  selectedImages,
+  mainImageId,
+  tabImageBlob,
   onDownload,
   isProcessing,
   downloadError,
   onOpenSettings
 }) => {
+  const isSticker = productType === 'sticker';
   const { apiKey: apiKeyFromContext } = useApiKey();
   const [viewMode, setViewMode] = useState<'list' | 'preview'>('list');
   const [aiMetadata, setAiMetadata] = useState<StickerMetadata | null>(null);
@@ -76,7 +79,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
         </div>
         <h2 className="text-2xl font-bold text-green-800">Ready to Package!</h2>
         <p className="text-green-700 mt-2 text-sm md:text-base">
-          Your stickers are sorted, resized, and named correctly.
+          {isSticker ? 'Your stickers are sorted, resized, and named correctly.' : 'Your emoticons are sorted, resized, and named correctly.'}
         </p>
       </div>
 
@@ -102,20 +105,21 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
         <div className="w-full lg:w-1/2">
           {viewMode === 'list' ? (
             <div className="grid grid-cols-1 gap-4">
-              {/* Main Image Summary */}
-              <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  {mainImage ? (
-                    <img src={mainImage.url} alt="Main" className="w-16 h-16 object-contain bg-gray-50 rounded" />
-                  ) : (
-                    <span className="text-red-500 text-sm">Missing</span>
-                  )}
-                  <div>
-                    <p className="font-bold text-gray-700">Main Image</p>
-                    <p className="text-sm font-mono text-gray-500">main.png (240x240)</p>
+              {isSticker && (
+                <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {mainImage ? (
+                      <img src={mainImage.url} alt="Main" className="w-16 h-16 object-contain bg-gray-50 rounded" />
+                    ) : (
+                      <span className="text-red-500 text-sm">Missing</span>
+                    )}
+                    <div>
+                      <p className="font-bold text-gray-700">Main Image</p>
+                      <p className="text-sm font-mono text-gray-500">main.png (240x240)</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Tab Image Summary */}
               <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
@@ -132,14 +136,14 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
                 </div>
               </div>
 
-              {/* Stickers Summary */}
+              {/* Content Summary */}
               <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center text-gray-400">
                      <Package className="w-8 h-8" />
                   </div>
                   <div>
-                    <p className="font-bold text-gray-700">Stickers</p>
+                    <p className="font-bold text-gray-700">{isSticker ? 'Stickers' : 'Emoticons'}</p>
                     <p className="text-sm font-mono text-gray-500">01.png - {String(selectedImages.length).padStart(2,'0')}.png</p>
                     <p className="text-xs text-gray-400 mt-1">{selectedImages.length} items</p>
                   </div>
@@ -286,7 +290,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
               {!isProcessing && <Download className="w-6 h-6 ml-2" />}
             </Button>
             <p className="mt-4 text-xs text-gray-400 text-center">
-              Downloads a .zip file compliant with LINE Creators Market.
+              {isSticker ? 'Downloads line-stickers-pack.zip' : 'Downloads line-emoticons-pack.zip'} for LINE Creators Market.
             </p>
           </div>
         </div>
