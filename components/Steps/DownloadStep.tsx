@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UploadedImage, ProductType } from '../../types';
 import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2, Settings } from 'lucide-react';
 import { Button } from '../Button';
@@ -38,15 +38,18 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
   const hasApiKey = !!apiKeyFromContext;
 
   const mainImage = selectedImages.find(img => img.id === mainImageId);
-  const tabImageUrl = useMemo(
-    () => (tabImageBlob ? URL.createObjectURL(tabImageBlob) : null),
-    [tabImageBlob]
-  );
+  const [tabImageUrl, setTabImageUrl] = useState<string | null>(null);
   useEffect(() => {
+    if (!tabImageBlob) {
+      setTabImageUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(tabImageBlob);
+    setTabImageUrl(url);
     return () => {
-      if (tabImageUrl) URL.revokeObjectURL(tabImageUrl);
+      URL.revokeObjectURL(url);
     };
-  }, [tabImageUrl]);
+  }, [tabImageBlob]);
 
   const handleGenerateAI = async () => {
     setIsAiLoading(true);
@@ -125,7 +128,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
               <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   {tabImageUrl ? (
-                    <img src={tabImageUrl} alt="Tab" className="w-16 h-12 object-contain bg-gray-50 rounded" />
+                    <img key={tabImageUrl} src={tabImageUrl} alt="Tab" className="w-16 h-12 object-contain bg-gray-50 rounded" decoding="async" />
                   ) : (
                     <span className="text-red-500 text-sm">Missing</span>
                   )}
@@ -178,7 +181,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
               {/* Fake Input */}
               <div className="bg-white p-2 border-t flex items-center gap-2">
                 <div className="bg-gray-100 flex-1 h-8 rounded-full"></div>
-                {tabImageUrl && <img src={tabImageUrl} className="w-6 h-6 opacity-50 grayscale" />}
+                {tabImageUrl && <img key={tabImageUrl} src={tabImageUrl} alt="Tab" className="w-6 h-6 opacity-50 grayscale object-contain" decoding="async" />}
               </div>
             </div>
           )}
