@@ -33,6 +33,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Ensure Rollup Linux native binding (workaround for npm optionalDependencies bug)
+      - name: Ensure Rollup native binding
+        run: npm install @rollup/rollup-linux-x64-gnu@4.57.1 --no-save
+
       - name: Build
         run: npm run build
         env:
