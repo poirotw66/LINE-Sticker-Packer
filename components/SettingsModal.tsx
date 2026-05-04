@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Key, Loader2 } from 'lucide-react';
 import { useApiKey } from '../contexts/ApiKeyContext';
+import { GEMINI_MODEL_OPTIONS, GeminiChatModelId } from '../constants/geminiModels';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,7 +9,7 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  const { apiKey, setApiKey, clearApiKey, hasApiKey } = useApiKey();
+  const { apiKey, setApiKey, clearApiKey, hasApiKey, geminiModel, setGeminiModel } = useApiKey();
   const [inputValue, setInputValue] = useState(apiKey ? '••••••••••••' : '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -105,6 +106,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               placeholder="Enter your API key"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             />
+          </div>
+
+          <div>
+            <label htmlFor="gemini-model-select" className="block text-sm font-medium text-gray-700 mb-1">
+              Gemini model
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Model used for &quot;Generate Text&quot; on the download step. Saved in this browser only.
+            </p>
+            <select
+              id="gemini-model-select"
+              value={geminiModel}
+              onChange={(e) => setGeminiModel(e.target.value as GeminiChatModelId)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm bg-white"
+            >
+              {GEMINI_MODEL_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {message && (

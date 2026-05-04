@@ -4,6 +4,7 @@ import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loade
 import { Button } from '../Button';
 import { generateStickerMetadata, StickerMetadata } from '../../services/aiService';
 import { useApiKey } from '../../contexts/ApiKeyContext';
+import { GEMINI_MODEL_OPTIONS } from '../../constants/geminiModels';
 
 interface DownloadStepProps {
   productType: ProductType;
@@ -29,7 +30,7 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
   onOpenSettings
 }) => {
   const isSticker = productType === 'sticker';
-  const { apiKey: apiKeyFromContext } = useApiKey();
+  const { apiKey: apiKeyFromContext, geminiModel } = useApiKey();
   const [viewMode, setViewMode] = useState<'list' | 'preview'>('list');
   const [aiMetadata, setAiMetadata] = useState<StickerMetadata | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -55,7 +56,13 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
     setIsAiLoading(true);
     setAiError(null);
     try {
-      const data = await generateStickerMetadata(apiKeyFromContext, selectedImages, mainImageId, tabImageBlob);
+      const data = await generateStickerMetadata(
+        apiKeyFromContext,
+        selectedImages,
+        mainImageId,
+        tabImageBlob,
+        geminiModel
+      );
       setAiMetadata(data);
     } catch (err: unknown) {
       console.error(err);
@@ -218,7 +225,11 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
              </div>
 
              <p className="text-xs text-indigo-700/70 mb-4">
-               Uses <strong>Gemini 2.5 Flash</strong> to analyze your stickers and generate a Title & Description.
+               Uses{' '}
+               <strong>
+                 {GEMINI_MODEL_OPTIONS.find((o) => o.id === geminiModel)?.label ?? geminiModel}
+               </strong>{' '}
+               (set in Settings) to analyze your stickers and generate a Title and Description.
              </p>
 
              {aiError && (

@@ -1,5 +1,6 @@
 import { UploadedImage } from '../types';
 import { GoogleGenAI } from "@google/genai";
+import type { GeminiChatModelId } from '../constants/geminiModels';
 
 // Helper to convert blob URL to base64 string
 const urlToBase64 = async (url: string): Promise<string> => {
@@ -29,7 +30,8 @@ export const generateStickerMetadata = async (
   apiKey: string | null,
   selectedImages: UploadedImage[],
   mainImageId: string | null,
-  tabImageBlob: Blob | null
+  tabImageBlob: Blob | null,
+  model: GeminiChatModelId
 ): Promise<StickerMetadata> => {
   const key = apiKey || (typeof process !== 'undefined' && process.env?.API_KEY) || (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY);
   if (!key) {
@@ -91,7 +93,7 @@ export const generateStickerMetadata = async (
 
   // 3. Call API
   const response = await ai.models.generateContent({
-    model: 'gemini-flash-latest', 
+    model,
     contents: {
       role: 'user',
       parts: parts
