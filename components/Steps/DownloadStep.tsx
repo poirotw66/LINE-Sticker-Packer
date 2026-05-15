@@ -1,10 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { UploadedImage, ProductType } from '../../types';
-import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2, Settings } from 'lucide-react';
+import saveAs from 'file-saver';
+import { Download, CheckCircle, Package, Smartphone, List, Sparkles, Copy, Loader2, Settings, FileDown } from 'lucide-react';
 import { Button } from '../Button';
 import { generateStickerMetadata, StickerMetadata } from '../../services/aiService';
 import { useApiKey } from '../../contexts/ApiKeyContext';
 import { GEMINI_MODEL_OPTIONS } from '../../constants/geminiModels';
+
+function sanitizeFileName(raw: string): string {
+  const trimmed = raw.trim().replace(/^\.+/, '');
+  const safe = trimmed
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/, '')
+    .trim();
+  const limited = safe.slice(0, 160).replace(/\.+$/, '').trim();
+  return limited.length > 0 ? limited : 'sticker-ai-info';
+}
+
+function buildAiMarkdown(meta: StickerMetadata): string {
+  return `# Traditional Chinese (Taiwan)\n\n## Title\n${meta.title_zh}\n\n## Description\n${meta.desc_zh}\n\n---\n\n# English\n\n## Title\n${meta.title_en}\n\n## Description\n${meta.desc_en}\n`;
+}
 
 interface DownloadStepProps {
   productType: ProductType;
@@ -77,6 +93,14 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
       setCopiedField(field);
       window.setTimeout(() => setCopiedField(null), COPY_FEEDBACK_MS);
     });
+  };
+
+  const downloadAiMarkdown = () => {
+    if (!aiMetadata) return;
+    const markdown = buildAiMarkdown(aiMetadata);
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const baseName = sanitizeFileName(aiMetadata.title_en);
+    saveAs(blob, `${baseName}.md`);
   };
 
   return (
@@ -240,6 +264,14 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
 
              {aiMetadata ? (
                <div className="space-y-4">
+                 <button
+                   type="button"
+                   onClick={downloadAiMarkdown}
+                   className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-700 bg-white border border-indigo-200 rounded-xl hover:bg-indigo-50 transition-colors"
+                 >
+                   <FileDown className="w-4 h-4" />
+                   Download as Markdown
+                 </button>
                  {/* Chinese Block */}
                  <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
                     <div className="flex justify-between items-center mb-1">

@@ -1,7 +1,16 @@
 import React, { useRef, useCallback } from 'react';
-import { UploadCloud, Image as ImageIcon, Trash2, AlertCircle } from 'lucide-react';
+import { UploadCloud, Trash2, AlertCircle, FolderOpen } from 'lucide-react';
 import { UploadedImage, StickerCount } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { collectImageFilesFromDataTransfer } from '../../utils/collectDroppedImageFiles';
+
+function sortImageFiles(files: File[]): File[] {
+  return [...files].sort((a, b) => {
+    const pa = (a as File & { webkitRelativePath?: string }).webkitRelativePath ?? a.name;
+    const pb = (b as File & { webkitRelativePath?: string }).webkitRelativePath ?? b.name;
+    return pa.localeCompare(pb, undefined, { sensitivity: 'base', numeric: true });
+  });
+}
 
 interface UploadStepProps {
   uploadedImages: UploadedImage[];
@@ -17,30 +26,37 @@ export const UploadStep: React.FC<UploadStepProps> = ({
   targetCount
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const processFiles = useCallback(
+    (files: File[]) => {
+      const validFiles = sortImageFiles(files.filter((f) => f.type.startsWith('image/')));
+      const newImages: UploadedImage[] = validFiles.map((file) => ({
+        id: uuidv4(),
+        url: URL.createObjectURL(file),
+        file,
+        name: file.name,
+      }));
+      onUpload(newImages);
+    },
+    [onUpload]
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       processFiles(Array.from(e.target.files));
     }
+    e.target.value = '';
   };
 
-  const processFiles = (files: File[]) => {
-    const validFiles = files.filter(f => f.type.startsWith('image/'));
-    const newImages: UploadedImage[] = validFiles.map(file => ({
-      id: uuidv4(),
-      url: URL.createObjectURL(file),
-      file,
-      name: file.name
-    }));
-    onUpload(newImages);
-  };
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFiles(Array.from(e.dataTransfer.files));
-    }
-  }, [onUpload]);
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      const files = await collectImageFilesFromDataTransfer(e.dataTransfer);
+      if (files.length > 0) processFiles(files);
+    },
+    [processFiles]
+  );
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -71,8 +87,31 @@ export const UploadStep: React.FC<UploadStepProps> = ({
         className="border-2 border-dashed border-gray-300 rounded-xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors group"
       >
         <UploadCloud className="w-12 h-12 text-gray-400 group-hover:text-green-500 mb-4 transition-colors" />
-        <p className="text-lg font-medium text-gray-700">Click or Drag images here</p>
-        <p className="text-sm text-gray-400 mt-1">Supports PNG, JPG</p>
+        <p className="text-lg font-medium text-gray-700">Click or drag images here</p>
+        <p className="text-sm text-gray-400 mt-1">PNG, JPG — drag a folder to add all images inside (including subfolders).</p>
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+            className="text-sm font-medium text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200 hover:bg-green-100"
+          >
+            Choose files
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              folderInputRef.current?.click();
+            }}
+            className="text-sm font-medium text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 inline-flex items-center gap-1.5"
+          >
+            <FolderOpen className="w-4 h-4" />
+            Choose folder
+          </button>
+        </div>
         <input 
           type="file" 
           ref={fileInputRef} 
@@ -80,6 +119,15 @@ export const UploadStep: React.FC<UploadStepProps> = ({
           multiple 
           accept="image/*"
           onChange={handleFileChange}
+        />
+        <input
+          type="file"
+          ref={folderInputRef}
+          className="hidden"
+          multiple
+          accept="image/*"
+          onChange={handleFileChange}
+          {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
         />
       </div>
 
