@@ -25,6 +25,28 @@ export interface StickerMetadata {
   desc_en: string;
 }
 
+/** LINE Creators Market English fields: half-width alphanumeric + half-width symbols only (ASCII printable). */
+function sanitizeLineEnglishField(raw: string): string {
+  const nfkc = raw.normalize('NFKC');
+  const asciiPrintable = nfkc.replace(/[^\x20-\x7E]/g, '');
+  return asciiPrintable.replace(/\s+/g, ' ').trim();
+}
+
+function truncateAsciiField(value: string, maxLen: number): string {
+  if (value.length <= maxLen) return value;
+  return value.slice(0, maxLen).replace(/\s+$/, '').trimEnd();
+}
+
+function normalizeStickerMetadata(parsed: StickerMetadata): StickerMetadata {
+  const title_en = truncateAsciiField(sanitizeLineEnglishField(parsed.title_en), 40);
+  const desc_en = truncateAsciiField(sanitizeLineEnglishField(parsed.desc_en), 160);
+  return {
+    ...parsed,
+    title_en: title_en.length > 0 ? title_en : 'Sticker Pack',
+    desc_en,
+  };
+}
+
 /** Pass apiKey from context (user setting or build-time env). */
 export const generateStickerMetadata = async (
   apiKey: string | null,
@@ -49,9 +71,12 @@ export const generateStickerMetadata = async (
     Please analyze the attached sticker images and generate a Title and Description for the LINE Creators Market.
     
     Requirements:
-    1. Title: Catchy, short (max 40 characters).
-    2. Description: Explain the usage scenarios or the character's personality (max 160 characters).
-    3. Output both Traditional Chinese (Taiwan style) and English.
+    1. Traditional Chinese title (title_zh): catchy, short (max 40 characters). Traditional Chinese (Taiwan style).
+    2. Traditional Chinese description (desc_zh): usage scenarios or character personality (max 160 characters).
+    3. English title (title_en) and English description (desc_en): LINE Creators Market only accepts HALF-WIDTH ASCII for English fields.
+       Use ONLY: Latin letters A-Z and a-z, digits 0-9, spaces, and standard half-width punctuation/symbols (ASCII printable characters).
+       Do NOT use full-width characters, CJK characters, emoji, accented Latin letters, or any character outside basic ASCII English keyboard text.
+       Rewrite wording if needed so English stays plain ASCII while staying catchy (max 40 chars title_en, max 160 chars desc_en).
     4. The tone should be fun, appealing, and relevant to the visual style of the stickers.`
   });
 
@@ -85,8 +110,16 @@ export const generateStickerMetadata = async (
     properties: {
       title_zh: { type: "STRING", description: "Traditional Chinese Title (Max 40 chars)" },
       desc_zh: { type: "STRING", description: "Traditional Chinese Description (Max 160 chars)" },
-      title_en: { type: "STRING", description: "English Title (Max 40 chars)" },
-      desc_en: { type: "STRING", description: "English Description (Max 160 chars)" },
+      title_en: {
+        type: "STRING",
+        description:
+          "English title max 40 chars. ASCII half-width only: A-Za-z0-9 spaces and basic punctuation; no full-width or non-ASCII.",
+      },
+      desc_en: {
+        type: "STRING",
+        description:
+          "English description max 160 chars. ASCII half-width only: A-Za-z0-9 spaces and basic punctuation; no full-width or non-ASCII.",
+      },
     },
     required: ["title_zh", "desc_zh", "title_en", "desc_en"],
   };
@@ -108,5 +141,6 @@ export const generateStickerMetadata = async (
   const text = response.text;
   if (!text) throw new Error("No response from AI");
 
-  return JSON.parse(text) as StickerMetadata;
+  const parsed = JSON.parse(text) as StickerMetadata;
+  return normalizeStickerMetadata(parsed);
 };
