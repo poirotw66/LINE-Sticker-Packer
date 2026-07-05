@@ -81,31 +81,30 @@ export const UploadStep: React.FC<UploadStepProps> = ({
 
       {/* Drop Zone */}
       <div 
-        onClick={() => fileInputRef.current?.click()}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        className="border-2 border-dashed border-gray-300 rounded-xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors group"
+        className="border-2 border-dashed border-gray-300 rounded-xl p-10 flex flex-col items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors group"
       >
-        <UploadCloud className="w-12 h-12 text-gray-400 group-hover:text-green-500 mb-4 transition-colors" />
-        <p className="text-lg font-medium text-gray-700">Click or drag images here</p>
-        <p className="text-sm text-gray-400 mt-1">PNG, JPG — drag a folder to add all images inside (including subfolders).</p>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex flex-col items-center justify-center cursor-pointer bg-transparent border-0 p-0 text-inherit"
+        >
+          <UploadCloud className="w-12 h-12 text-gray-400 group-hover:text-green-500 mb-4 transition-colors" />
+          <p className="text-lg font-medium text-gray-700">Click or drag images here</p>
+          <p className="text-sm text-gray-400 mt-1">PNG, JPG — drag a folder to add all images inside (including subfolders).</p>
+        </button>
         <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              fileInputRef.current?.click();
-            }}
+            onClick={() => fileInputRef.current?.click()}
             className="text-sm font-medium text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200 hover:bg-green-100"
           >
             Choose files
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              folderInputRef.current?.click();
-            }}
+            onClick={() => folderInputRef.current?.click()}
             className="text-sm font-medium text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 inline-flex items-center gap-1.5"
           >
             <FolderOpen className="w-4 h-4" />
