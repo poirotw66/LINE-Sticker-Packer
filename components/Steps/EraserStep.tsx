@@ -1,8 +1,57 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { UploadedImage } from '../../types';
-import { Eraser, Undo, Save, AlertCircle, Paintbrush, ZoomIn, ZoomOut, Pipette } from 'lucide-react';
+import { Eraser, Undo, Save, AlertCircle, Paintbrush, ZoomIn, ZoomOut, Pipette, Move } from 'lucide-react';
 
-type Tool = 'eraser' | 'brush';
+type Tool = 'eraser' | 'brush' | 'move';
+
+interface CanvasRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const DEFAULT_ZOOM = 0.5;
+const MIN_SELECTION_SIZE = 4;
+
+function normalizeRect(x0: number, y0: number, x1: number, y1: number): CanvasRect {
+  return {
+    x: Math.min(x0, x1),
+    y: Math.min(y0, y1),
+    width: Math.abs(x1 - x0),
+    height: Math.abs(y1 - y0),
+  };
+}
+
+function pointInRect(px: number, py: number, rect: CanvasRect): boolean {
+  return px >= rect.x && px <= rect.x + rect.width && py >= rect.y && py <= rect.y + rect.height;
+}
+
+function clampMoveRect(rect: CanvasRect, canvasW: number, canvasH: number): CanvasRect {
+  const x = Math.max(0, Math.min(rect.x, canvasW - rect.width));
+  const y = Math.max(0, Math.min(rect.y, canvasH - rect.height));
+  return { ...rect, x, y };
+}
+
+function moveCanvasRegion(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasRect,
+  targetX: number,
+  targetY: number
+): void {
+  const x = Math.floor(source.x);
+  const y = Math.floor(source.y);
+  const width = Math.floor(source.width);
+  const height = Math.floor(source.height);
+  const destX = Math.floor(targetX);
+  const destY = Math.floor(targetY);
+  const data = ctx.getImageData(x, y, width, height);
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillRect(x, y, width, height);
+  ctx.restore();
+  ctx.putImageData(data, destX, destY);
+}
 
 function rgbaToHex(r: number, g: number, b: number): string {
   return '#' + [r, g, b]
@@ -39,12 +88,21 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
   const [history, setHistory] = useState<ImageData[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [cursorStyle, setCursorStyle] = useState<{ x: number; y: number; radiusPx: number; tool: Tool } | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const [canvasBackground, setCanvasBackground] = useState<string>(CANVAS_BACKGROUNDS[0].id);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [isEyedropperMode, setIsEyedropperMode] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<CanvasRect | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<CanvasRect | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ dx: number; dy: number } | null>(null);
+  const moveInteractionRef = useRef<
+    | { mode: 'selecting'; startX: number; startY: number }
+    | { mode: 'dragging'; startX: number; startY: number; origin: CanvasRect }
+    | null
+  >(null);
+  const marqueeRectRef = useRef<CanvasRect | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,8 +121,13 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    setZoom(1);
+    setZoom(DEFAULT_ZOOM);
     setCanvasSize(null);
+    setSelectionRect(null);
+    setMarqueeRect(null);
+    setDragPreview(null);
+    moveInteractionRef.current = null;
+    marqueeRectRef.current = null;
 
     const img = new Image();
     img.src = selectedImage.url;
@@ -120,6 +183,111 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
 
   const hideCursor = () => setCursorStyle(null);
 
+  const canvasRectToOverlayStyle = (rect: CanvasRect): React.CSSProperties | null => {
+    if (!canvasRef.current || !containerRef.current) return null;
+    const canvas = canvasRef.current;
+    const canvasBox = canvas.getBoundingClientRect();
+    const containerBox = containerRef.current.getBoundingClientRect();
+    const scale = canvasBox.width / canvas.width;
+    return {
+      left: canvasBox.left - containerBox.left + rect.x * scale,
+      top: canvasBox.top - containerBox.top + rect.y * scale,
+      width: rect.width * scale,
+      height: rect.height * scale,
+    };
+  };
+
+  const pushHistory = () => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    const newState = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+    setHistory((prev) => [...prev.slice(-9), newState]);
+  };
+
+  const startMoveInteraction = (e: React.MouseEvent | React.TouchEvent) => {
+    const { x, y } = getCoordinates(e);
+    if (
+      selectionRect &&
+      pointInRect(x, y, selectionRect) &&
+      selectionRect.width >= MIN_SELECTION_SIZE &&
+      selectionRect.height >= MIN_SELECTION_SIZE
+    ) {
+      moveInteractionRef.current = { mode: 'dragging', startX: x, startY: y, origin: selectionRect };
+      setDragPreview({ dx: 0, dy: 0 });
+      return;
+    }
+    moveInteractionRef.current = { mode: 'selecting', startX: x, startY: y };
+    setSelectionRect(null);
+    const initial = normalizeRect(x, y, x, y);
+    marqueeRectRef.current = initial;
+    setMarqueeRect(initial);
+    setDragPreview(null);
+  };
+
+  const moveMoveInteraction = (e: React.MouseEvent | React.TouchEvent) => {
+    const interaction = moveInteractionRef.current;
+    if (!interaction) return;
+    e.preventDefault();
+    const { x, y } = getCoordinates(e);
+    if (interaction.mode === 'selecting') {
+      const rect = normalizeRect(interaction.startX, interaction.startY, x, y);
+      marqueeRectRef.current = rect;
+      setMarqueeRect(rect);
+      return;
+    }
+    setDragPreview({ dx: x - interaction.startX, dy: y - interaction.startY });
+  };
+
+  const finishMoveInteraction = () => {
+    const interaction = moveInteractionRef.current;
+    if (!interaction || !canvasRef.current) {
+      moveInteractionRef.current = null;
+      setMarqueeRect(null);
+      setDragPreview(null);
+      return;
+    }
+
+    if (interaction.mode === 'selecting') {
+      const rect = marqueeRectRef.current;
+      moveInteractionRef.current = null;
+      marqueeRectRef.current = null;
+      setMarqueeRect(null);
+      if (rect && rect.width >= MIN_SELECTION_SIZE && rect.height >= MIN_SELECTION_SIZE) {
+        setSelectionRect(rect);
+      }
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || !dragPreview) {
+      moveInteractionRef.current = null;
+      setDragPreview(null);
+      return;
+    }
+
+    const target = clampMoveRect(
+      {
+        ...interaction.origin,
+        x: interaction.origin.x + dragPreview.dx,
+        y: interaction.origin.y + dragPreview.dy,
+      },
+      canvas.width,
+      canvas.height
+    );
+
+    if (target.x !== interaction.origin.x || target.y !== interaction.origin.y) {
+      moveCanvasRegion(ctx, interaction.origin, target.x, target.y);
+      setSelectionRect(target);
+      setHasUnsavedChanges(true);
+      pushHistory();
+    }
+
+    moveInteractionRef.current = null;
+    setDragPreview(null);
+  };
+
   const applyStroke = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
     ctx.beginPath();
     ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
@@ -138,6 +306,10 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
   }, []);
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+    if (tool === 'move') {
+      startMoveInteraction(e);
+      return;
+    }
     if (isEyedropperMode) {
       const { x, y } = getCoordinates(e);
       sampleColorAt(x, y);
@@ -159,6 +331,10 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
   };
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (tool === 'move') {
+      moveMoveInteraction(e);
+      return;
+    }
     if (isEyedropperMode || !isDrawing || !canvasRef.current) return;
     e.preventDefault();
     const { x, y } = getCoordinates(e);
@@ -176,10 +352,14 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     draw(e);
-    updateCursor(e);
+    if (tool !== 'move') updateCursor(e);
   };
 
   const stopDrawing = () => {
+    if (tool === 'move') {
+      finishMoveInteraction();
+      return;
+    }
     if (isDrawing && canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
       if (ctx) {
@@ -225,7 +405,7 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
       <div className="text-center shrink-0">
         <h2 className="text-2xl font-bold text-gray-800">Touch Up & Erase</h2>
         <p className="text-gray-500 mt-1 text-sm">
-          Select an image to touch up. Use the eraser to make areas transparent, or the brush to fill in colors.
+          Touch up stickers with eraser or brush. Use Move to select an area and drag it to a new position.
         </p>
       </div>
 
@@ -267,17 +447,40 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
                  <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
                    <button
                      type="button"
-                     onClick={() => setTool('eraser')}
+                     onClick={() => {
+                       setTool('eraser');
+                       setSelectionRect(null);
+                       setMarqueeRect(null);
+                       setDragPreview(null);
+                       moveInteractionRef.current = null;
+                     }}
                      className={`flex items-center gap-1 px-2 py-1.5 text-sm font-medium transition-colors ${tool === 'eraser' ? 'bg-gray-200 text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                    >
                      <Eraser className="w-4 h-4" /> Eraser
                    </button>
                    <button
                      type="button"
-                     onClick={() => setTool('brush')}
+                     onClick={() => {
+                       setTool('brush');
+                       setSelectionRect(null);
+                       setMarqueeRect(null);
+                       setDragPreview(null);
+                       moveInteractionRef.current = null;
+                     }}
                      className={`flex items-center gap-1 px-2 py-1.5 text-sm font-medium transition-colors ${tool === 'brush' ? 'bg-gray-200 text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                    >
                      <Paintbrush className="w-4 h-4" /> Brush
+                   </button>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setTool('move');
+                       setColorPickerOpen(false);
+                       setIsEyedropperMode(false);
+                     }}
+                     className={`flex items-center gap-1 px-2 py-1.5 text-sm font-medium transition-colors ${tool === 'move' ? 'bg-gray-200 text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                   >
+                     <Move className="w-4 h-4" /> Move
                    </button>
                  </div>
 
@@ -295,7 +498,13 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
                  )}
 
                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {tool === 'eraser' ? <Eraser className="w-4 h-4 text-gray-600 flex-shrink-0" /> : <Paintbrush className="w-4 h-4 text-gray-600 flex-shrink-0" />}
+                    {tool === 'eraser' ? (
+                      <Eraser className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                    ) : tool === 'brush' ? (
+                      <Paintbrush className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                    ) : (
+                      <Move className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                    )}
                     <span className="text-xs font-bold text-gray-500 uppercase hidden sm:inline">Size</span>
                     <input 
                       type="range" 
@@ -303,7 +512,8 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
                       max="100" 
                       value={brushSize} 
                       onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                      className="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer flex-shrink-0"
+                      disabled={tool === 'move'}
+                      className="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer flex-shrink-0 disabled:opacity-40"
                     />
                     <div 
                       className="w-5 h-5 rounded-full border border-gray-300 flex-shrink-0"
@@ -462,6 +672,12 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
              </div>
            )}
 
+           {tool === 'move' && selectedImage && (
+             <div className="bg-amber-50 text-amber-900 text-sm font-medium py-1.5 px-3 text-center shrink-0 border-b border-amber-100">
+               Drag to draw a selection box, then drag inside the box to move that area
+             </div>
+           )}
+
            {/* Eyedropper mode hint */}
            {isEyedropperMode && selectedImage && (
              <div className="bg-blue-600 text-white text-sm font-medium py-1.5 px-3 text-center shrink-0">
@@ -513,14 +729,51 @@ export const EraserStep: React.FC<EraserStepProps> = ({ images, onUpdateImage })
                       onTouchEnd={stopDrawing}
                       className="block w-full h-full"
                       style={{
-                        cursor: isEyedropperMode ? 'crosshair' : cursorStyle ? 'none' : 'crosshair',
+                        cursor:
+                          tool === 'move'
+                            ? dragPreview
+                              ? 'grabbing'
+                              : 'crosshair'
+                            : isEyedropperMode
+                              ? 'crosshair'
+                              : cursorStyle
+                                ? 'none'
+                                : 'crosshair',
                         boxShadow: '0 0 0 2px rgba(0,0,0,0.15), 0 0 0 4px rgba(255,255,255,0.6)',
                         borderRadius: '2px',
                       }}
                     />
                   </div>
-                  {/* Circular cursor showing current brush size; hide when picking color */}
-                  {cursorStyle && !isEyedropperMode && (
+                  {(() => {
+                    if (tool !== 'move' || !canvasSize) return null;
+                    let overlayRect: CanvasRect | null = null;
+                    if (marqueeRect) {
+                      overlayRect = marqueeRect;
+                    } else if (dragPreview && selectionRect) {
+                      overlayRect = clampMoveRect(
+                        {
+                          ...selectionRect,
+                          x: selectionRect.x + dragPreview.dx,
+                          y: selectionRect.y + dragPreview.dy,
+                        },
+                        canvasSize.width,
+                        canvasSize.height
+                      );
+                    } else if (selectionRect) {
+                      overlayRect = selectionRect;
+                    }
+                    if (!overlayRect || overlayRect.width < 1 || overlayRect.height < 1) return null;
+                    const style = canvasRectToOverlayStyle(overlayRect);
+                    if (!style) return null;
+                    return (
+                      <div
+                        className="pointer-events-none absolute border-2 border-dashed border-blue-500 bg-blue-500/10"
+                        style={style}
+                      />
+                    );
+                  })()}
+                  {/* Circular cursor showing current brush size; hide when picking color or moving */}
+                  {cursorStyle && !isEyedropperMode && tool !== 'move' && (
                     <div
                       className="pointer-events-none absolute rounded-full border-2 border-gray-600"
                       style={{
