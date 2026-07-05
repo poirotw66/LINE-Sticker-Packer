@@ -1,6 +1,61 @@
-import { UploadedImage } from '../types';
+import { UploadedImage, ProductType } from '../types';
 import { GoogleGenAI } from "@google/genai";
 import type { GeminiChatModelId } from '../constants/geminiModels';
+
+const TITLE_MAX_LEN = 40;
+const DESC_MAX_LEN = 160;
+
+function buildMetadataPrompt(productType: ProductType, stickerCount: number): string {
+  const productLabel = productType === 'sticker' ? 'sticker pack (貼圖)' : 'emoticon pack (表情貼)';
+
+  return `You are an expert copywriter for LINE Creators Market (${productLabel}).
+
+Analyze the attached images (main cover first, then sample ${productType === 'sticker' ? 'stickers' : 'emoticons'}) and write listing copy that helps users discover and understand this set.
+
+## Step 1 — Visual analysis (internal)
+Identify: main character or motif, art style, color mood, recurring emotions/actions, and 2–3 chat situations where these images fit (e.g. greeting, thanks, tired, cheering up).
+
+## Step 2 — Write four fields (JSON only)
+
+### title_zh (max ${TITLE_MAX_LEN} characters)
+- Traditional Chinese (Taiwan). Must read naturally in Taiwan usage.
+- Short, memorable, searchable. Prefer character name + vibe, or a catchy theme phrase.
+- No emoji, no line breaks, no quotes wrapping the whole title.
+- Do not mention "LINE", "貼圖", "表情貼", or sticker count.
+
+### desc_zh (max ${DESC_MAX_LEN} characters)
+- Traditional Chinese (Taiwan).
+- 1–2 sentences: who/what this set is, personality or tone, and when friends would send these (concrete chat moments).
+- Warm, friendly, not overly salesy. No emoji, no line breaks.
+
+### title_en (max ${TITLE_MAX_LEN} characters)
+- LINE English listing accepts HALF-WIDTH ASCII ONLY: A–Z, a–z, 0–9, spaces, and basic punctuation (. , ! ? ' - &).
+- Same concept as title_zh, localized naturally (not a literal translation if awkward).
+- No emoji, no full-width characters, no accented letters, no CJK.
+
+### desc_en (max ${DESC_MAX_LEN} characters)
+- Same ASCII-only rules as title_en.
+- Same concept as desc_zh: character/theme + usage scenarios in plain English.
+- No emoji, no line breaks.
+
+## Hard rules
+- Stay faithful to what you see; do not invent characters or themes not shown.
+- Count characters before finalizing; stay within limits.
+- zh and en pairs should match in meaning but read naturally in each language.
+- Avoid copyrighted brand names, celebrity names, and misleading claims.
+- This pack has ${stickerCount} images; do not list image numbers or filenames.
+
+Return JSON with keys: title_zh, desc_zh, title_en, desc_en.`;
+}
+
+function collapseSingleLine(raw: string): string {
+  return raw.replace(/\s+/g, ' ').trim();
+}
+
+function truncateField(value: string, maxLen: number): string {
+  if (value.length <= maxLen) return value;
+  return value.slice(0, maxLen).replace(/\s+$/, '').trimEnd();
+}
 
 // Helper to convert blob URL to base64 string
 const urlToBase64 = async (url: string): Promise<string> => {
@@ -32,16 +87,14 @@ function sanitizeLineEnglishField(raw: string): string {
   return asciiPrintable.replace(/\s+/g, ' ').trim();
 }
 
-function truncateAsciiField(value: string, maxLen: number): string {
-  if (value.length <= maxLen) return value;
-  return value.slice(0, maxLen).replace(/\s+$/, '').trimEnd();
-}
-
 function normalizeStickerMetadata(parsed: StickerMetadata): StickerMetadata {
-  const title_en = truncateAsciiField(sanitizeLineEnglishField(parsed.title_en), 40);
-  const desc_en = truncateAsciiField(sanitizeLineEnglishField(parsed.desc_en), 160);
+  const title_zh = truncateField(collapseSingleLine(parsed.title_zh), TITLE_MAX_LEN);
+  const desc_zh = truncateField(collapseSingleLine(parsed.desc_zh), DESC_MAX_LEN);
+  const title_en = truncateField(sanitizeLineEnglishField(parsed.title_en), TITLE_MAX_LEN);
+  const desc_en = truncateField(sanitizeLineEnglishField(parsed.desc_en), DESC_MAX_LEN);
   return {
-    ...parsed,
+    title_zh: title_zh.length > 0 ? title_zh : '貼圖',
+    desc_zh,
     title_en: title_en.length > 0 ? title_en : 'Sticker Pack',
     desc_en,
   };
@@ -53,7 +106,8 @@ export const generateStickerMetadata = async (
   selectedImages: UploadedImage[],
   mainImageId: string | null,
   tabImageBlob: Blob | null,
-  model: GeminiChatModelId
+  model: GeminiChatModelId,
+  productType: ProductType = 'sticker'
 ): Promise<StickerMetadata> => {
   const key = apiKey || (typeof process !== 'undefined' && process.env?.API_KEY) || (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY);
   if (!key) {
@@ -67,17 +121,7 @@ export const generateStickerMetadata = async (
 
   // Add Prompt
   parts.push({
-    text: `You are a professional LINE Sticker creator and copywriter. 
-    Please analyze the attached sticker images and generate a Title and Description for the LINE Creators Market.
-    
-    Requirements:
-    1. Traditional Chinese title (title_zh): catchy, short (max 40 characters). Traditional Chinese (Taiwan style).
-    2. Traditional Chinese description (desc_zh): usage scenarios or character personality (max 160 characters).
-    3. English title (title_en) and English description (desc_en): LINE Creators Market only accepts HALF-WIDTH ASCII for English fields.
-       Use ONLY: Latin letters A-Z and a-z, digits 0-9, spaces, and standard half-width punctuation/symbols (ASCII printable characters).
-       Do NOT use full-width characters, CJK characters, emoji, accented Latin letters, or any character outside basic ASCII English keyboard text.
-       Rewrite wording if needed so English stays plain ASCII while staying catchy (max 40 chars title_en, max 160 chars desc_en).
-    4. The tone should be fun, appealing, and relevant to the visual style of the stickers.`
+    text: buildMetadataPrompt(productType, selectedImages.length),
   });
 
   // Helper to add image part
@@ -108,17 +152,21 @@ export const generateStickerMetadata = async (
   const schema = {
     type: "OBJECT",
     properties: {
-      title_zh: { type: "STRING", description: "Traditional Chinese Title (Max 40 chars)" },
-      desc_zh: { type: "STRING", description: "Traditional Chinese Description (Max 160 chars)" },
+      title_zh: {
+        type: "STRING",
+        description: `Traditional Chinese (Taiwan) title, max ${TITLE_MAX_LEN} chars. Memorable, no emoji, no LINE/product meta words.`,
+      },
+      desc_zh: {
+        type: "STRING",
+        description: `Traditional Chinese (Taiwan) description, max ${DESC_MAX_LEN} chars. Character/theme plus 2-3 chat use cases.`,
+      },
       title_en: {
         type: "STRING",
-        description:
-          "English title max 40 chars. ASCII half-width only: A-Za-z0-9 spaces and basic punctuation; no full-width or non-ASCII.",
+        description: `English title max ${TITLE_MAX_LEN} chars. ASCII half-width only (A-Za-z0-9 and basic punctuation).`,
       },
       desc_en: {
         type: "STRING",
-        description:
-          "English description max 160 chars. ASCII half-width only: A-Za-z0-9 spaces and basic punctuation; no full-width or non-ASCII.",
+        description: `English description max ${DESC_MAX_LEN} chars. ASCII half-width only; same meaning as desc_zh.`,
       },
     },
     required: ["title_zh", "desc_zh", "title_en", "desc_en"],
@@ -134,7 +182,7 @@ export const generateStickerMetadata = async (
     config: {
       responseMimeType: "application/json",
       responseSchema: schema,
-      temperature: 0.7,
+      temperature: 0.5,
     }
   });
 

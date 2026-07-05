@@ -77,7 +77,8 @@ export const DownloadStep: React.FC<DownloadStepProps> = ({
         selectedImages,
         mainImageId,
         tabImageBlob,
-        geminiModel
+        geminiModel,
+        productType
       );
       setAiMetadata(data);
     } catch (err: unknown) {
